@@ -169,9 +169,20 @@ var temp = (function(options) {
 		this.items = items.map(wrapString);
 		this.items.unshift(new Start(twOptions.start));
 		this.items.push(new End(twOptions.end));
-		this.width = this.items.reduce(function(sofar, el) { return sofar + el.width + (el.needsSpace?20:0)}, 0)+1;
-		this.up = Math.max.apply(null, this.items.map(function (x) { return x.up; }));
-		this.down = Math.max.apply(null, this.items.map(function (x) { return x.down; }));
+		// this.width = this.items.reduce(function(sofar, el) { return sofar + el.width + (el.needsSpace?20:0)}, 0)+1;
+		// this.up = Math.max.apply(null, this.items.map(function (x) { return x.up; }));
+		// this.down = Math.max.apply(null, this.items.map(function (x) { return x.down; }));
+
+		this.up = this.down = this.height = this.width = 0;
+		for(const item of this.items) {
+			if (!item.height)
+				item.height = 0;
+			this.width += item.width + (item.needsSpace?20:0);
+			this.up = Math.max(this.up, item.up - this.height);
+			this.height += item.height;
+			this.down = Math.max(this.down - item.height, item.down);
+		}		
+
 		this.formatted = false;		
 	}
 	subclassOf(Diagram, FakeSVG);
@@ -195,13 +206,16 @@ var temp = (function(options) {
 			}
 			item.format(x, y, item.width).addTo(g);
 			x += item.width;
+			if (!item.height)
+				item.height = 0;
+			y += item.height;
 			if(item.needsSpace) {
 				Path(x,y).h(10).addTo(g);
 				x += 10;
 			}
 		}
 		this.attrs.width = this.width + paddingl + paddingr;
-		this.attrs.height = this.up + this.down + paddingt + paddingb;
+		this.attrs.height = this.up + this.height + this.down + paddingt + paddingb;
 		this.attrs.viewBox = "0 0 "  + this.attrs.width + " " + this.attrs.height;
 		g.addTo(this);
 		this.formatted = true;
@@ -258,6 +272,80 @@ var temp = (function(options) {
 		}
 		return this;
 	}
+
+	function Stack(items) {
+		if(!(this instanceof Stack)) return new Stack([].slice.call(arguments));
+		FakeSVG.call(this, 'g');
+		if( items.length === 0 ) {
+			throw new RangeError("Stack() must have at least one child.");
+		}
+		this.items = items.map(wrapString);
+		this.width = Math.max.apply(null, this.items.map(function(e) { return e.width + (e.needsSpace?20:0); }));
+		//if(this.items[0].needsSpace) this.width -= 10;
+		//if(this.items[this.items.length-1].needsSpace) this.width -= 10;
+		if(this.items.length > 1){
+			this.width += Diagram.ARC_RADIUS*2;
+		}
+		this.needsSpace = true;
+		this.up = this.items[0].up;
+		this.down = this.items[this.items.length-1].down;
+
+		this.height = 0;
+		var last = this.items.length - 1;
+		for(var i = 0; i < this.items.length; i++) {
+			var item = this.items[i];
+			if (!item.height) 
+				item.height = 0;  
+			this.height += item.height;  
+			if(i > 0) {
+				this.height += Math.max(Diagram.ARC_RADIUS*2, item.up + Diagram.VERTICAL_SEPARATION);
+			}
+			if(i < last) {
+				this.height += Math.max(Diagram.ARC_RADIUS*2, item.down + Diagram.VERTICAL_SEPARATION);
+			}
+		}
+	}
+
+	subclassOf(Stack, FakeSVG);
+	Stack.prototype.format = function(x,y,width) {
+		var gaps = determineGaps(width, this.width);
+		Path(x,y).h(gaps[0]).addTo(this);
+		x += gaps[0];
+		var xInitial = x;
+		if(this.items.length > 1) {
+			Path(x, y).h(Diagram.ARC_RADIUS).addTo(this);
+			x += Diagram.ARC_RADIUS;
+		}
+
+		for(var i = 0; i < this.items.length; i++) {
+			var item = this.items[i];
+			var innerWidth = this.width - (this.items.length>1 ? Diagram.ARC_RADIUS*2 : 0);
+			item.format(x, y, innerWidth).addTo(this);
+			x += innerWidth;
+			y += item.height;
+
+			if(i !== this.items.length-1) {
+				Path(x, y)
+					.arc('ne').down(Math.max(0, item.down + Diagram.VERTICAL_SEPARATION - Diagram.ARC_RADIUS*2))
+					.arc('es').left(innerWidth)
+					.arc('nw').down(Math.max(0, this.items[i+1].up + Diagram.VERTICAL_SEPARATION - Diagram.ARC_RADIUS*2))
+					.arc('ws').addTo(this);
+				y += Math.max(item.down + Diagram.VERTICAL_SEPARATION, Diagram.ARC_RADIUS*2) + Math.max(this.items[i+1].up + Diagram.VERTICAL_SEPARATION, Diagram.ARC_RADIUS*2);
+				//y += Math.max(Diagram.ARC_RADIUS*4, item.down + Diagram.VERTICAL_SEPARATION*2 + this.items[i+1].up)
+				x = xInitial+Diagram.ARC_RADIUS;
+			}
+
+		}
+
+		if(this.items.length > 1) {
+			Path(x,y).h(Diagram.ARC_RADIUS).addTo(this);
+			x += Diagram.ARC_RADIUS;
+		}
+		Path(x,y).h(gaps[1]).addTo(this);
+
+		return this;
+	}
+
 
 	function Choice(normal, items) {
 		if(!(this instanceof Choice)) return new Choice(normal, [].slice.call(arguments,1));
@@ -529,6 +617,7 @@ var temp = (function(options) {
 	if (exports) {
 		exports.Diagram = Diagram;
 		exports.Sequence = Sequence;
+		exports.Stack = Stack;
 		exports.Choice = Choice;
 		exports.Optional = Optional;
 		exports.OneOrMore = OneOrMore;
