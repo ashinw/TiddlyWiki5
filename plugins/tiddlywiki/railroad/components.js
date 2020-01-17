@@ -177,11 +177,10 @@ Components of a railroad diagram.
 		return railroad.Optional(this.child.toSvg(), this.normal ? undefined : "skip");
 	}
 	
-	var OptionalRepeated = function(content,separator,normal,wantArrow) {
+	var OptionalRepeated = function(content,separator,normal) {
 		this.initialiseWithChild("OptionalRepeated",content);
 		this.separator = toSingleChild(separator);
 		this.normal = normal;
-		this.wantArrow = wantArrow;
 	};
 	
 	OptionalRepeated.prototype = new Component();
@@ -190,13 +189,12 @@ Components of a railroad diagram.
 		// Call ZeroOrMore(component,separator,"skip")
 		var separatorSvg = this.separator ? this.separator.toSvg() : null;
 		var skip = this.normal ? undefined : "skip";
-		return railroad.ZeroOrMore(this.child.toSvg(),separatorSvg,skip,this.wantArrow);
+		return railroad.ZeroOrMore(this.child.toSvg(),separatorSvg,skip);
 	}
 	
-	var Repeated = function(content,separator,wantArrow) {
+	var Repeated = function(content,separator) {
 		this.initialiseWithChild("Repeated",content);
 		this.separator = toSingleChild(separator);
-		this.wantArrow = wantArrow;
 	};
 	
 	Repeated.prototype = new Component();
@@ -204,18 +202,18 @@ Components of a railroad diagram.
 	Repeated.prototype.toSvg = function() {
 		// Call OneOrMore(component,separator)
 		var separatorSvg = this.separator ? this.separator.toSvg() : null;
-		return railroad.OneOrMore(this.child.toSvg(),separatorSvg,this.wantArrow);
+		return railroad.OneOrMore(this.child.toSvg(),separatorSvg);
 	}
 	
-	var Link = function(content,options) {
+	var Link = function(content,twOptions) {
 		this.initialiseWithChild("Link",content);
-		this.options = options;
+		this.twOptions = twOptions;
 	};
 	
 	Link.prototype = new Component();
 	
 	Link.prototype.toSvg = function() {
-		return railroad.Link(this.child.toSvg(),this.options);
+		return railroad.Link(this.child.toSvg(),this.twOptions);
 	}
 	
 	var Transclusion = function(content) {
@@ -236,12 +234,18 @@ Components of a railroad diagram.
 	
 	Root.prototype = new Component();
 	
-	Root.prototype.toSvg = function(options) {
+	Root.prototype.toSvg = function() {
 		var args = this.getSvgOfChildren();
-		args.unshift(options);
-		// Call Diagram(options,component1,component2,...)
 		return railroad.Diagram.apply(null,args);
 	}
+
+	var Script = function(content) {
+		this.initialiseLeaf("Script", content);
+	};
+	Script.prototype = new Component();
+	Script.prototype.toSvg = function() {
+		return railroad.generate(this.text);
+	};
 	
 	var Sequence = function(content) {
 		this.initialiseWithChildren("Sequence",content);
@@ -282,6 +286,7 @@ Components of a railroad diagram.
 		return railroad.Choice.apply(null,args);
 	}
 	
+
 	/////////////////////////// Exports
 	
 	exports.components = {
@@ -297,7 +302,9 @@ Components of a railroad diagram.
 		Sequence: Sequence,
 		Stack: Stack,
 		Terminal: Terminal,
-		Transclusion: Transclusion
+		Transclusion: Transclusion,
+		Script: Script,
+		railroad: railroad
 	};
 	
 	})();

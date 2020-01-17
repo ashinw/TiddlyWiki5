@@ -42,10 +42,11 @@ RailroadWidget.prototype.render = function(parent,nextSibling) {
 		// Initialise options from the config tiddler or widget attributes
 		var config = $tw.wiki.getTiddlerData(RAILROAD_OPTIONS,{});
 		var options = {
-			arrow: this.getAttribute("arrow", config.arrow || "yes") === "yes",
+			showArrows: this.getAttribute("showArrows", config.showArrows || "yes") === "yes",
 			debug: this.getAttribute("debug", config.debug || "no") === "yes",
-			start: this.getAttribute("start", config.start || "single"),
-			end: this.getAttribute("end", config.end || "single")
+			start: this.getAttribute("start", config.start || "simple"),
+			startLabel: this.getAttribute("startLabel", config.startLabel),
+			end: this.getAttribute("end", config.end || "simple")
 		};
 		// Parse the source
 		var parser = new Parser(this,source,options);
@@ -73,7 +74,7 @@ RailroadWidget.prototype.renderDebug = function(parser,div) {
 
 RailroadWidget.prototype.renderSvg = function(parser,div) {
 	// Generate a model of the diagram
-	var fakeSvg = parser.root.toSvg(parser.options);
+	var fakeSvg = parser.root.toSvg();
 	// Render the model into a tree of SVG DOM nodes
 	var svg = fakeSvg.toSVG();
 	// Fill in the remaining attributes of any link nodes
