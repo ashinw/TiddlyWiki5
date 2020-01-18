@@ -43,6 +43,7 @@ RailroadWidget.prototype.render = function(parent,nextSibling) {
 		var config = $tw.wiki.getTiddlerData(RAILROAD_OPTIONS,{});
 		var options = {
 			showArrows: this.getAttribute("showArrows", config.showArrows || "yes") === "yes",
+			closeEol: this.getAttribute("closeEol", config.closeEol || "no") === "yes",
 			debug: this.getAttribute("debug", config.debug || "no") === "yes",
 			start: this.getAttribute("start", config.start || "simple"),
 			startLabel: this.getAttribute("startLabel", config.startLabel),

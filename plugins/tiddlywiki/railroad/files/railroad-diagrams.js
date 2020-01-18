@@ -258,6 +258,7 @@ var temp = (function(options) {
 		var y = paddingt;
 		y += this.up;
 		var g = FakeSVG('g', Diagram.STROKE_ODD_PIXEL_LENGTH ? {transform:'translate(.5 .5)'} : {});
+		var extraViewboxHeight = 0; 
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			if(item.needsSpace) {
@@ -271,9 +272,11 @@ var temp = (function(options) {
 				Path(x,y).h(10).addTo(g);
 				x += 10;
 			}
+			if (item instanceof Choice) // diagram viewbox height defect for Choice/Stack combo
+				extraViewboxHeight += item.extraHeight ? item.extraHeight: 0; 
 		}
 		this.attrs.width = this.width + paddingl + paddingr;
-		this.attrs.height = this.up + this.height + this.down + paddingt + paddingb;
+		this.attrs.height = this.up + this.height + this.down + paddingt + paddingb + extraViewboxHeight;
 		this.attrs.viewBox = "0 0 " + this.attrs.width + " " + this.attrs.height;
 		g.addTo(this);
 		this.formatted = true;
@@ -404,6 +407,7 @@ var temp = (function(options) {
 			x += Diagram.ARC_RADIUS;
 		}
 
+		var lastItem;
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			var innerWidth = this.width - (this.items.length>1 ? Diagram.ARC_RADIUS*2 : 0);
@@ -421,11 +425,12 @@ var temp = (function(options) {
 				//y += Math.max(Diagram.ARC_RADIUS*4, item.down + Diagram.VERTICAL_SEPARATION*2 + this.items[i+1].up)
 				x = xInitial+Diagram.ARC_RADIUS;
 			}
-
+			lastItem = item;
 		}
 
 		if(this.items.length > 1) {
-			Path(x,y).h(Diagram.ARC_RADIUS).addTo(this);
+			if (!(lastItem instanceof End))
+				Path(x,y).h(Diagram.ARC_RADIUS).addTo(this);
 			x += Diagram.ARC_RADIUS;
 		}
 		Path(x,y).h(gaps[1]).addTo(this);
@@ -715,10 +720,24 @@ var temp = (function(options) {
 				.down(distanceFromY - Diagram.ARC_RADIUS*2)
 				.arc('ws').addTo(this);
 			item.format(x+Diagram.ARC_RADIUS*2, y+distanceFromY, innerWidth).addTo(this);
-			Path(x+Diagram.ARC_RADIUS*2+innerWidth, y+distanceFromY+item.height)
-				.arc('se')
-				.up(distanceFromY - Diagram.ARC_RADIUS*2 + item.height - this.height)
-				.arc('wn').addTo(this);
+			var lastNode = item;
+			if (item instanceof Sequence
+					|| item instanceof Stack
+					|| item instanceof OptionalSequence
+					|| item instanceof AlternatingSequence
+				) {
+				lastNode = item.items[item.items.length-1];
+				if (item instanceof Stack)
+					this.extraHeight = 40 * item.items.length; // there is a defect with diagram viewbox height for Choice/Stack combo
+			}
+			if (lastNode instanceof End && Diagram.config.closeEol) {
+				// deferedAddto = undefined;
+			} else {
+				Path(x+Diagram.ARC_RADIUS*2+innerWidth, y+distanceFromY+item.height)
+					.arc('se')
+					.up(distanceFromY - Diagram.ARC_RADIUS*2 + item.height - this.height)
+					.arc('wn').addTo(this);
+			}
 			distanceFromY += Math.max(Diagram.ARC_RADIUS, item.height + item.down + Diagram.VERTICAL_SEPARATION + (i == last ? 0 : this.items[i+1].up));
 		}
 

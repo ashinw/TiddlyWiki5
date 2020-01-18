@@ -8,20 +8,26 @@ Parser for the source of a railroad diagram.
 [:x]			optional, normally included
 [x]				optional, normally omitted
 {x}				one or more
-{x +","}		one or more, comma-separated
-[{:x}]			zero or more, normally included
-[{:x +","}]		zero or more, comma-separated, normally included
-[{x}]			zero or more, normally omitted
-[{x +","}]		zero or more, comma-separated, normally omitted
+{x y}		one or more
+[{:x y}]			zero or more, normally included
+[{:x + y}]		zero or more with lower captioning, normally included
+[{x y}]			zero or more, normally omitted
+[{x + y}]		zero or more, normally omitted
 x y z			sequence
-<-x y z->		explicit sequence
-^-x y z-^		explicit stack
-(x|y|z)			alternatives
-(x|:y|z)		alternatives, normally y
-"x"				terminal
-<"x">			nonterminal
+<-x y z ->		explicit sequence
+<^x y z^>		explicit stack sequence (ie. Stack)
+<!x y!>   alternating sequence (ie. AlternatingSequence)
+<?x y z?>   optional sequence (ie. OptionalSequence)
+(x|y|z)			alternatives (ie, Choice)
+(x|:y|z)		alternatives, normally y (ie, Choice)
+($x|:y|z$)	all alternatives, normally y (ie. MultipleChoice)
+(&x|:y|z&)	any alternatives, normally y (ie. MultipleChoice)
+(-x|y|z-)		horizontal alternatives (ie. HorizontalChoice)
+"x"					terminal
+<"x">				nonterminal
 /"blah"/		comment
--				dummy
+-						dummy
+-||					end (simple: -||, complex: -|)
 [[x|"tiddler"]]	link
 {{"tiddler"}}	transclusion
 
@@ -29,6 +35,7 @@ x y z			sequence
 
 pragmas:
 	\showArrows yes|no
+	\closeEol yes|no
 	\debug components
 	\start simple|complex
 	\startLabel string
@@ -100,6 +107,15 @@ pragmas:
 					case "(":
 						component = this.parseChoice();
 						break;
+					case "(-":
+						component = this.parseHorizontalChoice();
+						break;
+					case "($":
+						component = this.parseMultipleChoice('$');
+						break;
+					case "(&":
+						component = this.parseMultipleChoice('&');
+						break;
 					case "/":
 						component = this.parseComment();
 						break;
@@ -112,8 +128,20 @@ pragmas:
 					case "<-":
 						component = this.parseSequence();
 						break;
-					case "^-":
+					case "<^":
 						component = this.parseStack();
+						break;
+					case "<!":
+						component = this.parseAlternatingSequence();
+						break;
+					case "<?":
+						component = this.parseOptionalSequence();
+						break;
+					case "-|":
+						component = this.parseEnd(this.token.value);
+						break;
+					case "-||":
+						component = this.parseEnd(this.token.value);
 						break;
 					case "-":
 						component = this.parseDummy();
@@ -142,9 +170,42 @@ pragmas:
 		// Consume the closing bracket
 		this.close(")");
 		// Create a component
-		return new components.Choice(content,colon === -1 ? 0 : colon);
+		return new components.Choice(colon === -1 ? 0 : colon, content);
 	};
-	
+
+	Parser.prototype.parseMultipleChoice = function(key) {
+		// Consume the ($ or (&)
+		this.advance();
+		var content = [],
+			colon = -1;
+		do {
+			// Allow at most one branch to be prefixed with a colon
+			if(colon === -1 && this.eat(":")) {
+				colon = content.length;
+			}
+			// Parse the next branch
+			content.push(this.parseContent());
+		} while(this.eat("|"));
+		// Consume the closing bracket
+		this.close(key+")");
+		// Create a component
+		return new components.MultipleChoice(content, colon === -1 ? 0 : colon, key === '$' ? "all": "any");
+	};
+
+	Parser.prototype.parseHorizontalChoice = function() {
+		// Consume the (-
+		this.advance();
+		var content = [];
+		do {
+			// Parse the next branch
+			content.push(this.parseContent());
+		} while(this.eat("|"));
+		// Consume the closing bracket
+		this.close("-)");
+		// Create a component
+		return new components.HorizontalChoice(content);
+	};
+
 	Parser.prototype.parseComment = function() {
 		// Consume the /
 		this.advance();
@@ -162,7 +223,15 @@ pragmas:
 		// Create a component
 		return new components.Dummy();
 	};
-	
+
+	Parser.prototype.parseEnd = function(sKind) {
+		// Consume the -| or -||
+		this.advance();
+		var typeVal = sKind.length === 2 ? "complex": "simple";
+		// Create a component
+		return new components.End({type: typeVal});
+	};
+
 	Parser.prototype.parseLink = function() {
 		// Consume the [[
 		this.advance();
@@ -253,16 +322,37 @@ pragmas:
 		return new components.Sequence(content);
 	};
 	
-	
 	Parser.prototype.parseStack = function() {
-		// Consume the ^-
+		// Consume the <^
 		this.advance();
 		// Parse the content
 		var content = this.parseContent();
-		// Consume the closing -^
-		this.close("-^");
+		// Consume the closing 
+		this.close("^>");
 		// Create a component
 		return new components.Stack(content);
+	};
+
+	Parser.prototype.parseAlternatingSequence = function() {
+		// Consume the <!
+		this.advance();
+		// Parse the content
+		var content = this.parseContent();
+		// Consume the closing 
+		this.close("!>");
+		// Create a component
+		return new components.AlternatingSequence(content);
+	};
+
+	Parser.prototype.parseOptionalSequence = function() {
+		// Consume the <?
+		this.advance();
+		// Parse the content
+		var content = this.parseContent();
+		// Consume the closing 
+		this.close("?>");
+		// Create a component
+		return new components.OptionalSequence(content);
 	};
 	
 	Parser.prototype.parseTerminal = function() {
@@ -304,6 +394,8 @@ pragmas:
 		// Apply the setting
 		if(pragma === "showArrows") {
 			this.options.showArrows = this.parseYesNo(pragma);		
+		} else if(pragma === "closeEol") {
+			this.options.closeEol = this.parseYesNo(pragma);;
 		} else if(pragma === "debug") {
 			this.options.debug = true;
 			components.railroad.Diagram.DEBUG = true;
@@ -403,7 +495,7 @@ pragmas:
 	Parser.prototype.tokenise = function(source) {
 		var tokens = [],
 			pos = 0,
-			c, s, token;
+			c1st, c2nd, c3rd, s1stAnd2nd, s, token;
 		while(pos < source.length) {
 			// Initialise this iteration
 			s = token = null;
@@ -413,48 +505,48 @@ pragmas:
 			if (pos >= source.length) {
 				break;
 			}
-			// Examine the next character
-			c = source.charAt(pos);
-			if("\"'".indexOf(c) !== -1) {
+			// Examine the next characters
+			c1st = source.charAt(pos);
+			c2nd = source.charAt(pos+1); 
+			c3rd = source.charAt(pos+2);
+			s1stAnd2nd = c1st + c2nd;
+			if (c1st === "\"" || c1st === "'") { // "\"'".indexOf(c1st) !== -1
 				// String literal
 				token = $tw.utils.parseStringLiteral(source,pos);
 				if(!token) {
 					throw "Unterminated string literal";
 				}
-			} else if("[]{}".indexOf(c) !== -1) {
+			} else if ("[]{}".indexOf(c1st) !== -1) {
 				// Single or double character
-				s = source.charAt(pos+1) === c ? c + c : c;
-			} else if(c === "<") {
-				// < or <- or <script> 
-				s = "<script>";
-				if (source.substr(pos, 8) === s) {
-					token = this.readScript(source, pos);
-				} else
-					s = source.charAt(pos+1) === "-" ? "<-" : "<";
-			} else if(c === "^") {
-				// ^ or ^-
-				s = source.charAt(pos+1) === "-" ? "^-" : "^";
-			} else if(c === "-") {
-				// - or ->
-				// s = source.charAt(pos+1) === ">" ? "->" : "-";
-				if (source.charAt(pos+1) === ">")
-					s = "->";
-				else if (source.charAt(pos+1) === "^")
-					s = "-^";
-				else
-					s= "-";
-			} else if("()>^+/:|".indexOf(c) !== -1) {
-				// Single character
-				s = c;
-			} else if(c.match(/[a-zA-Z]/)) {
+				s = c2nd === c1st ? c1st + c1st : c1st;
+			} else if (c1st === "<" && (c2nd === '-' || c2nd === '^' || c2nd === '!' || c2nd === "?")) {
+				// < or <- or <^ or <! or <? or <script> 
+				s = c1st + c2nd;
+			} else if ((c1st === '-' || c1st === '^' || c1st === '!' || c1st === "?") && c2nd === '>') {
+					s = c1st + c2nd;
+			} else if (c1st === "(" && (c2nd === '$' || c2nd === '&' || c2nd === '-')) {
+				// ( or ($ or (& or (- 
+				s = c1st + c2nd;
+			} else if ((c1st === '$' || c1st === '&' || c1st === '-') && c2nd === ')') {
+				s = c1st + c2nd;
+			} else if (c1st === '-' && c2nd === '|') {
+				s = c1st + c2nd;
+				if (c3rd === '|')
+					s+= c3rd;
+			} else if (source.substr(pos, 8) === "<script>") {
+				token = this.readScript(source, pos);
+			} else if("()<>+/:|-".indexOf(c1st) !== -1) {
+			// Single character
+				s = c1st;
+			} else if(c1st.match(/[a-zA-Z]/)) {
 				// Name
 				token = this.readName(source,pos);
-			} else if(c.match(/\\/)) {
+			} else if(c1st.match(/\\/)) {
 				// Pragma
 				token = this.readPragma(source,pos);
-			} else {
-				throw "Syntax error at " + c;
-			}
+			} else 
+				throw "Syntax error at " + c1st;
+
 			// Add our findings to the return array
 			if(token) {
 				tokens.push(token);
@@ -495,7 +587,7 @@ pragmas:
 		var lpos = source.lastIndexOf("</script>");
 		if (lpos === -1)
 			throw "Invalid Railroad script";
-		var script = source.substr(pos + 8, lpos - (8+1));
+		var script = source.substr(pos + 8, lpos - (pos+8+1));
 		return {type: "script", value: script, start: pos, end: lpos + 9};
 	}
 

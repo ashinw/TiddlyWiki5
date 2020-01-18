@@ -142,6 +142,17 @@ Components of a railroad diagram.
 	Dummy.prototype.toSvg = function() {
 		return railroad.Skip();
 	}
+
+	var End = function(endType) {
+		this.initialiseLeaf("End");
+		this.endType = endType;
+	};
+	
+	End.prototype = new Component();
+	
+	End.prototype.toSvg = function() {
+		return railroad.End(this.endType);
+	}
 	
 	var Nonterminal = function(text) {
 		this.initialiseLeaf("Nonterminal",text);
@@ -269,7 +280,9 @@ Components of a railroad diagram.
 		return railroad.Stack.apply(null,this.getSvgOfChildren());
 	}
 	
-	var Choice = function(content,normal) {
+	///
+
+	var Choice = function(normal, content) {
 		this.initialiseWithChildren("Choice",content.map(toSingleChild));
 		for(var i=0; i<this.children.length; i++) {
 			this.children[i].isChoiceBranch = true;
@@ -286,13 +299,80 @@ Components of a railroad diagram.
 		return railroad.Choice.apply(null,args);
 	}
 	
+	var OptionalSequence = function(content) {
+		this.initialiseWithChildren("OptionalSequence",content.map(toSingleChild));
+		for(var i=0; i<this.children.length; i++) {
+			this.children[i].isChoiceBranch = true;
+		}
+	};
+	
+	OptionalSequence.prototype = new Component();
+	
+	OptionalSequence.prototype.toSvg = function() {
+		// Call OptionalSequence(component1,component2,...)
+		var args = this.getSvgOfChildren();
+		return railroad.OptionalSequence.apply(null,args);
+	}
 
+	var AlternatingSequence = function(content) {
+		this.initialiseWithChildren("AlternatingSequence",content.map(toSingleChild));
+		for(var i=0; i<this.children.length; i++) {
+			this.children[i].isChoiceBranch = true;
+		}
+	};
+	
+	AlternatingSequence.prototype = new Component();
+	
+	AlternatingSequence.prototype.toSvg = function() {
+		// Call AlternatingSequence(component1,component2,...)
+		var args = this.getSvgOfChildren();
+		return railroad.AlternatingSequence.apply(null,args);
+	}
+
+	var HorizontalChoice = function(content) {
+		this.initialiseWithChildren("HorizontalChoice",content.map(toSingleChild));
+		for(var i=0; i<this.children.length; i++) {
+			this.children[i].isChoiceBranch = true;
+		}
+	};
+	
+	HorizontalChoice.prototype = new Component();
+	
+	HorizontalChoice.prototype.toSvg = function() {
+		// Call HorizontalChoice(component1,component2,...)
+		var args = this.getSvgOfChildren();
+		return railroad.HorizontalChoice.apply(null,args);
+	}
+
+	var MultipleChoice = function(content, normal, type) {
+		this.initialiseWithChildren("MultipleChoice",content.map(toSingleChild));
+		for(var i=0; i<this.children.length; i++) {
+			this.children[i].isChoiceBranch = true;
+		}
+		this.normal = normal;
+		this.type = type;
+	};
+	
+	MultipleChoice.prototype = new Component();
+	
+	MultipleChoice.prototype.toSvg = function() {
+		// Call MultipleChoice(normal,component1,component2,...)
+		var args = this.getSvgOfChildren();
+		args.unshift(this.normal, this.type);
+		return railroad.MultipleChoice.apply(null,args);
+	}
+	
 	/////////////////////////// Exports
 	
 	exports.components = {
 		Choice: Choice,
+		OptionalSequence: OptionalSequence,
+		AlternatingSequence: AlternatingSequence,
+		HorizontalChoice: HorizontalChoice,
+		MultipleChoice: MultipleChoice,
 		Comment: Comment,
 		Dummy: Dummy,
+		End: End,
 		Link: Link,
 		Nonterminal: Nonterminal,
 		Optional: Optional,
