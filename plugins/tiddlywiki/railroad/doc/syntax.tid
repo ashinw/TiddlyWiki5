@@ -1,7 +1,11 @@
-created: 20150103184022184
-modified: 20150119220342000
+created: 20200119084443812
+modified: 20200120011021888
+steps_1_2_3: <- "1" "2" "3" ->
+steps_a_b_c: <- A B C ->
 title: $:/plugins/tiddlywiki/railroad/syntax
+type: text/vnd.tiddlywiki
 
+! Railroad TiddlyWiki Syntax Notation
 The railroad widget uses a special notation to construct the components defined below.
 
 `x` and `y` here stand for any component.
@@ -9,83 +13,263 @@ The railroad widget uses a special notation to construct the components defined 
 Names (as opposed to quoted strings) are available when a value starts with a letter and contains only letters, digits, underscores, dots and hyphens.
 
 ---
+!! Process flow
 
-; sequence
+; Sequence
 : <$railroad text=""" ["<-"] {x} ["->"] """/>
 * A sequence of components
 * The `<-` and `->` delimiters allow you to force a single component to be treated as a sequence. This is occasionally useful for spacing a diagram out
 
----
+Example
 
-; optional
-: <$railroad text=""" "[" [":"] x "]" """/>
-* A component that can be omitted
-* The colon makes `x` appear straight ahead
+* `<$railroad text=""" <- x y z -> """/>`
+<$railroad text=""" <- x y z -> """/>
 
 ---
 
-; repeated
-: <$railroad text=""" "{" x [:"+" y] "}" """/>
-* A list of one or more `x`
-* The `+` suffix adds `y` as a separator between each `x` and the next
+; Stack
+: <$railroad text=""" ["<^"] {x} ["^>"] """/>
+* A sequence of components
+* The `<^` and `^>` delimiters allow you to force a single component to be treated as a sequence. This is occasionally useful for vertically spacing a diagram out
+
+Example
+
+* `<$railroad text=""" <^ x y z ^> """/>`
+<$railroad text=""" <^ x y z ^> """/>
 
 ---
 
-; optional repeated
-: <$railroad text=""" "[{" [":"] x [:"+" y] "}]" """/>
-* An optional list of `x`, i.e. a list of zero or more `x`
+; Alternating sequence
+: <$railroad text=""" ["<!"] x y ["!>"] """/>
+* An alternating sequence of two nodes
+* The `<!` and `!>` delimiters allow you to force a single component to be treated as a sequence. This is occasionally useful for indicating binary switching
+* ''Note, only two nodes are permitted in this sequence''
+
+
+Example
+
+* `<$railroad text=""" <! "on" "off" !> """/>`
+<$railroad text=""" <! "on" "off" !> """/>
+
+
+; Otherwise sequence
+: <$railroad text=""" ["<?"] {x} ["?>"] """/>
+* A sequence where every item is individually optional, but at least one item must be chosen
+* The `<?` and `?>` delimiters allow you to force a single component to be treated as a sequence. This is occasionally useful for indicating shortcuts
+
+Example
+
+* `<$railroad text=""" <? x y z ?> """/>`
+<$railroad text=""" <? x y z ?> """/>
 
 ---
 
-; choice
-: <$railroad text=""" "(" {[:":"] x +"|"} ")" """/>
-* A set of alternatives
+!! Selection
+
+; Single-select in stack layout
+: <$railroad text=""" \titleLinkDelim "$" "(" {[/"once"/ ":"] x +"|"} ")" """/>
+* Pursue 1 option from a set of alternatives
 * The colon indicates which branch appears straight ahead. By default, it's the first branch
 
+Example
+
+* `<$railroad text=""" (A|B|:C|D) """/>`
+<$railroad text=""" (A|B|:C|D) """/>
+
 ---
 
-; string / terminal
-: <$railroad text={{$:/plugins/tiddlywiki/railroad/syntax-string}}/>
+; Single-select in side-by-side layout
+: <$railroad text=""" \titleLinkDelim "$" "(-" {x  +"|"} "-)" """/>
+* Pursue 1 option from a set of alternatives
+* The colon indicates which branch appears straight ahead. By default, it's the first branch
+
+Example
+* `<$railroad text=""" (- A|B|C|D -) """/>`
+<$railroad text=""" (- A|B|C|D -) """/>
+
+---
+
+; ALL Multi-select prior to continuation 
+: <$railroad text=""" \titleLinkDelim "!" "($" {[:":"] x +"|"} "$)" """/>
+* Pursue ALL options from a set of alternatives
+* The colon indicates which branch appears straight ahead. By default, it's the first branch
+
+Example
+
+* `<$railroad text=""" ($ primary|:secondary|tertiary $) """/>`
+<$railroad text=""" ($ primary|:secondary|tertiary $) """/>
+
+---
+
+; 1+ Multi-select prior to continuation 
+: <$railroad text=""" \titleLinkDelim "!" "(&" {[:":"] x +"|"} "&)" """/>
+* Pursue at least 1 option from a set of alternatives
+* The colon indicates which branch appears straight ahead. By default, it's the first branch
+
+Example
+
+* `<$railroad text=""" (& breakfast|:lunch|dinner &) """/>`
+<$railroad text=""" (& breakfast|:lunch|dinner &) """/>
+
+---
+
+; Otherwise 
+: <$railroad text=""" "[" [":"] x "]" """/>
+* A component that can be omitted or by passed
+* The colon makes `x` appear straight ahead
+
+Example
+
+* `<$railroad text=""" ["red light"] """/>`
+<$railroad text=""" ["red light"] """/>
+
+---
+
+; Skip
+: <$railroad text=""" "-" """/>
+* Used with selects to provide an alternate null path
+
+Example
+
+* `<$railroad text=""" (A|B|:- ) """/>`
+<$railroad text=""" (A|B|:- ) """/>
+
+---
+
+!! Repetition
+
+; Loop
+: <$railroad text=""" "{" x {[ [/"once"/ "+" ] x]} "}" """/>
+* A list of one or more `x`
+* The `+` adds subsequent nodes on the return to the next loop
+
+Example
+
+* `<$railroad text=""" { bday + "wait 1 year" } """/>`
+<$railroad text=""" { bday + "wait 1 year" } """/>
+
+---
+
+; Otherwise loop
+: <$railroad text=""" "[" [":"] "{" {x + ["+" /"once"/]} "}]" """/>
+* An optional list of `x`, i.e. a list of zero or more `x`
+
+Example
+
+* `<$railroad text=""" [{x y +z}] """/>`
+<$railroad text=""" [:{x y +z}] """/>
+
+---
+!! Nodes
+
+; Terminal
+: <$railroad text="""\titleLinkDelim "!" '"' text [<"|"> link ] '"' """/>
 * A literal or terminal component
 * This follows the normal ~TiddlyWiki rules for quoted strings
+* link can be either external (ie. incl protocol) or internal (tiddler title) 
+
+Example
+
+* `<$railroad text=""" 'Input Stream::read|Java IO InputStream' """/>`
+<$railroad text=""" 'Input Stream::read|Java IO InputStream' """/>
 
 ---
 
-; nonterminal
-: <$railroad text=""" (name | "<" string ">") """/>
-* A nonterminal component, i.e. the name of another diagram
+; Nonterminal
+: <$railroad text="""\titleLinkDelim "!" (name | '<"' text [<"|"> link ] '">') """/>
+* A nonterminal component, i.e. the name of another diagram or junction point
+* link can be either external (ie. incl protocol) or internal (tiddler title) 
+
+Example
+
+* `<$railroad text=""" <'Input Stream|Java IO InputStream'> """/>`
+<$railroad text=""" <'Input Stream|Java IO InputStream'> """/>
 
 ---
 
-; comment
-: <$railroad text=""" "/" string "/" """/>
-* A comment
+; Terminus
+: <$railroad text=""" \titleLinkDelim "!" "-|" ["|"] """/>
+* An end of line component indicating that this sequence has ended
+* The extra pipe causes the end point to be styled as simple
+* See also \closeEol pragma 
+
+Example
+
+* `<$railroad text=""" a b (:c d|e f -|) g """/>`
+<$railroad text=""" a b (:c d|e f -|) g """/>
 
 ---
 
-; dummy
-: <$railroad text=""" "-" """/>
-* The absence of a component
+; Comment
+: <$railroad text="""\titleLinkDelim "!" "/" '"' text [<"|"> link ] '"' "/" """/>
+* A comment in italics displayed inline within it's container's layout pattern
+* link can be either external (ie. incl protocol) or internal (tiddler title) 
+
+Example
+
+* `<$railroad text=""" /'Input Stream|Java IO InputStream'/ """/>`
+<$railroad text=""" /'Input Stream|Java IO InputStream'/ """/>
 
 ---
 
-; link
-: <$railroad text=""" "[[" x "|" (name|string) "]]" """/>
-* A link to the tiddler title or URI given by the string or name
+; Link
+: <$railroad text="""\titleLinkDelim "!" "[[" title ["|" link] "]]" """/>
+* A link to the tiddler title or URI given by the string or name. 
+* if link is omitted then the link reference defaults to the title
+
+Example
+
+* `<$railroad text=""" [[Input Stream::read|Java IO InputStream]] [[Byte Array Input Stream]] """/>`
+<$railroad text=""" [[Input Stream::read|Java IO InputStream]] [[Byte Array Input Stream]] """/>
 
 ---
 
-; transclusion
-: <$railroad text=""" "{{" (name|string) "}}" """/>
-* Treats the content of another tiddler as diagram syntax and transcludes it into the current diagram
+!! Embedding
+
+; Transclusion
+: <$railroad text=""" "{{" <? tiddler <- '!!' field ->  ?> "}}" """/>
+* Treats the content of another tiddler and/or field as diagram syntax and transcludes it into the current diagram
+
+Example
+
+* In this Tiddler the following field name/value pairs have been declared using the editor:
+* `steps_1_2_3: {{!!steps_1_2_3}}`
+** steps_1_2_3: {{!!steps_1_2_3}}
+* `steps_a_b_c: {{!!steps_a_b_c}}`
+** steps_a_b_c: {{!!steps_a_b_c}}
+
+* `<$railroad text=""" ({{!!steps_1_2_3}} "4"|{{!!steps_a_b_c}} D|:- ) """/>`
+
+<$railroad text=""" ({{!!steps_1_2_3}} "4"|{{!!steps_a_b_c}} D|:- ) """/>
 
 ---
 
-; arrow pragma
-: <$railroad text=""" "\arrow" ("yes" | "no") """/>
+!! Configuration
+
+; showArrows pragma
+: <$railroad text=""" "\showArrows" ("yes" | "no") """/>
 * Controls whether repeat paths have an arrow on them
 * Can be toggled on and off in mid-diagram, if desired
 
+Example
+* `<$railroad text=""" {x} \showArrows "no" {y} \showArrows "yes" {z} """/>`
+
+<$railroad text=""" {x} \showArrows "no" {y} \showArrows "yes" {z} """/>
+
+
+---
+
+; titleLinkDelim pragma
+: <$railroad text=""" "\titleLinkDelim" "'" delimiter "'" """/>
+* Used to avoid escaping the typical | character in WikiLink notation
+* Can be toggled on and off in mid-diagram, if desired
+* delimiter can be either a char or a string
+
+Example
+
+* `<$railroad text=""" \titleLinkDelim '!' /'Lights can be either on|off'/  "but" \titleLinkDelim '$' /'Remember to turn them off!'/ """/>`
+
+<$railroad text=""" \titleLinkDelim '!' /'Lights switches can be either on|off'/  "but" \titleLinkDelim '$' /'Remember to turn them off!'/ """/>
 ---
 
 ; debug pragma
@@ -95,5 +279,38 @@ Names (as opposed to quoted strings) are available when a value starts with a le
 ---
 
 ; start/end pragma
-: <$railroad text=""" ("\start" |: "\end") ("none" |: "single" | "double") """/>
+: <$railroad text=""" ("\start" |: "\end") ("simple" | :"complex") """/>
 * Controls the style of the diagram's startpoint or endpoint
+
+Example
+
+* `<$railroad text=""" \start "complex" (A|B {F} \end "complex" \closeEol "yes" -||) """/>`
+
+<$railroad text=""" \start "complex" (A|B {F} 
+\end "complex" \closeEol "yes" -||) """/>
+
+---
+
+; closeEol pragma
+: <$railroad text=""" "\closeEol" ("yes" | "no") """/>
+* Omits a line back to the main track to model a real railway line
+* Note, this is a departure from the traditional railroad diagram and may cause some confusion
+
+Example
+
+* `<$railroad text=""" (A|B {F} 
+\closeEol "yes" -|| | C D E \closeEol "no" -|| ) """/>`
+
+<$railroad text=""" (A|B {F} 
+\closeEol "yes" -|| | C D E \closeEol "no" -|| ) """/>
+
+---
+
+; startLabel pragma
+: <$railroad text=""" "\startLabel" "'" caption "'" """/>
+* Displays a caption on the diagram's startpoint
+
+Example
+
+* `<$railroad text=""" \startLabel "GO" x y """/>`
+<$railroad text=""" \startLabel "GO" x y """/>

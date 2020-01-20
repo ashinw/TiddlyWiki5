@@ -20,12 +20,12 @@ x y z			sequence
 <?x y z?>   optional sequence (ie. OptionalSequence)
 (x|y|z)			alternatives (ie, Choice)
 (x|:y|z)		alternatives, normally y (ie, Choice)
+(-x|y|z-)		horizontal alternatives (ie. HorizontalChoice)
 ($x|:y|z$)	all alternatives, normally y (ie. MultipleChoice)
 (&x|:y|z&)	any alternatives, normally y (ie. MultipleChoice)
-(-x|y|z-)		horizontal alternatives (ie. HorizontalChoice)
-"x"					terminal
-<"x">				nonterminal
-/"blah"/		comment
+"x|link"		terminal with optional link
+<"x|link">	nonterminal with optional link
+/"blah|link"/		comment (see titleLinkDelim for delimiter)
 -						dummy
 -||					end (simple: -||, complex: -|)
 [[x|"tiddler"]]	link
@@ -40,6 +40,7 @@ pragmas:
 	\start simple|complex
 	\startLabel string
 	\end simple|complex
+	\titleLinkDelim string
 
 \*/
 (function(){
@@ -93,6 +94,11 @@ pragmas:
 				component = this.parsePragma();
 			} else if (this.at("script")) {
 				component = this.parseScript();
+			} else if (this.at("tw-ref")) {
+				if (this.token.kind === "[[")
+					component = this.parseLink();
+				else
+					component = this.parseTransclusion();
 			} else {
 				switch(this.token.value) {
 					case "[":
@@ -118,12 +124,6 @@ pragmas:
 						break;
 					case "/":
 						component = this.parseComment();
-						break;
-					case "[[":
-						component = this.parseLink();
-						break;
-					case "{{":
-						component = this.parseTransclusion();
 						break;
 					case "<-":
 						component = this.parseSequence();
@@ -154,6 +154,14 @@ pragmas:
 	
 	/////////////////////////// Specific components
 	
+	Parser.prototype.prepareTwLinkAttr = function(target) {
+		var attr = {"data-tw-target": target};
+		if($tw.utils.isLinkExternal(target)) {
+			attr["data-tw-external"] = true;
+		}
+		return attr;
+	};
+
 	Parser.prototype.parseChoice = function() {
 		// Consume the (
 		this.advance();
@@ -206,17 +214,6 @@ pragmas:
 		return new components.HorizontalChoice(content);
 	};
 
-	Parser.prototype.parseComment = function() {
-		// Consume the /
-		this.advance();
-		// The comment's content should be in a string literal
-		var content = this.expectString("after /");
-		// Consume the closing /
-		this.close("/");
-		// Create a component
-		return new components.Comment(content);
-	};
-	
 	Parser.prototype.parseDummy = function() {
 		// Consume the -
 		this.advance();
@@ -229,35 +226,56 @@ pragmas:
 		this.advance();
 		var typeVal = sKind.length === 2 ? "complex": "simple";
 		// Create a component
-		return new components.End({type: typeVal});
+		return new components.End(typeVal, this.options.closeEol);
 	};
 
 	Parser.prototype.parseLink = function() {
-		// Consume the [[
-		this.advance();
-		// Parse the content
-		var content = this.parseContent();
-		// Consume the |
-		this.expect("|");
-		// Consume the target
-		var target = this.expectNameOrString("as link target");
-		// Prepare some attributes for the SVG "a" element to carry
-		var options = {"data-tw-target": target};
-		if($tw.utils.isLinkExternal(target)) {
-			options["data-tw-external"] = true;
-		}
-		// Consume the closing ]]
-		this.close("]]");
 		// Create a component
-		return new components.Link(content,options);
+		var content = this.token.value;
+		this.advance();
+		var cmpAttr = {};
+		var pos = content.indexOf(this.options.titleLinkDelim);
+		if (pos !== -1) {
+			var target = content.substr(pos+this.options.titleLinkDelim.length);
+			content = content.substr(0, pos);
+			cmpAttr = {href: this.prepareTwLinkAttr(target)};
+		} else
+			cmpAttr = {href: this.prepareTwLinkAttr(content)};
+		return new components.Nonterminal(content, cmpAttr); // changed underlying implementation to Terminal
 	};
 	
+	Parser.prototype.parseTransclusion = function() {
+		// Consume the {{...}}
+		var textRef = this.token.value;		
+		this.advance();
+		// Retrieve the content of the text reference
+		var source = this.widget.wiki.getTextReference(textRef,"",this.widget.getVariable("currentTiddler"));
+		// Parse the content
+		var content = new Parser(this.widget,source, this.options).content;
+		// Create a component
+		return new components.Transclusion(content);
+	};
+
 	Parser.prototype.parseName = function() {
 		// Create a component
 		var component = new components.Nonterminal(this.token.value);
 		// Consume the name
 		this.advance();
 		return component;
+	};
+	
+	Parser.prototype.parseTerminal = function() {
+		// Consume the string literal
+		var content = this.token.value;
+		var cmpAttr = {};
+		var pos = content.indexOf(this.options.titleLinkDelim);
+		if (pos !== -1) {
+			var target = content.substr(pos+this.options.titleLinkDelim.length);
+			content = content.substr(0, pos);
+			cmpAttr = {href: this.prepareTwLinkAttr(target)};
+		}
+		this.advance();
+		return new components.Terminal(content, cmpAttr);
 	};
 	
 	Parser.prototype.parseNonterminal = function() {
@@ -267,10 +285,35 @@ pragmas:
 		var content = this.expectString("after <");
 		// Consume the closing bracket
 		this.close(">");
+		var cmpAttr = {};
+		var pos = content.indexOf(this.options.titleLinkDelim);
+		if (pos !== -1) {
+			var target = content.substr(pos+this.options.titleLinkDelim.length);
+			content = content.substr(0, pos);
+			cmpAttr = {href: this.prepareTwLinkAttr(target)};
+		}
 		// Create a component
-		return new components.Nonterminal(content);
+		return new components.Nonterminal(content, cmpAttr);
 	};
 	
+	Parser.prototype.parseComment = function() {
+		// Consume the /
+		this.advance();
+		// The comment's content should be in a string literal
+		var content = this.expectString("after /");
+		var cmpAttr = {};
+		var pos = content.indexOf(this.options.titleLinkDelim);
+		if (pos !== -1) {
+			var target = content.substr(pos+this.options.titleLinkDelim.length);
+			content = content.substr(0, pos);
+			cmpAttr = {href: this.prepareTwLinkAttr(target)};
+		}
+		// Consume the closing /
+		this.close("/");
+		// Create a component
+		return new components.Comment(content, cmpAttr);
+	};
+
 	Parser.prototype.parseOptional = function() {
 		// Consume the [
 		this.advance();
@@ -308,7 +351,7 @@ pragmas:
 		// Consume the closing bracket
 		this.close("}");
 		// Create a component
-		return new components.Repeated(content,separator);
+		return new components.Repeated(content,separator,this.options.showArrows);
 	};
 	
 	Parser.prototype.parseSequence = function() {
@@ -355,28 +398,6 @@ pragmas:
 		return new components.OptionalSequence(content);
 	};
 	
-	Parser.prototype.parseTerminal = function() {
-		var component = new components.Terminal(this.token.value);
-		// Consume the string literal
-		this.advance();
-			return component;
-	};
-	
-	Parser.prototype.parseTransclusion = function() {
-		// Consume the {{
-		this.advance();
-		// Consume the text reference
-		var textRef = this.expectNameOrString("as transclusion source");
-		// Consume the closing }}
-		this.close("}}");
-		// Retrieve the content of the text reference
-		var source = this.widget.wiki.getTextReference(textRef,"",this.widget.getVariable("currentTiddler"));
-		// Parse the content
-		var content = new Parser(this.widget,source).content;
-		// Create a component
-		return new components.Transclusion(content);
-	};
-
 	Parser.prototype.parseScript = function() {
 		this.root = new components.Script(this.token.value);
 		this.advance();
@@ -405,6 +426,8 @@ pragmas:
 			this.options.startLabel = this.parseSettingValue(pragma);		
 		} else if(pragma === "end") {
 			this.options.end = this.parseTerminusStyle(pragma);		
+		} else if(pragma === "titleLinkDelim") {
+			this.options.titleLinkDelim = this.parseSettingValue(pragma);		
 		} else {
 			throw "Invalid pragma";
 		}
@@ -510,7 +533,7 @@ pragmas:
 			c2nd = source.charAt(pos+1); 
 			c3rd = source.charAt(pos+2);
 			s1stAnd2nd = c1st + c2nd;
-			if (c1st === "\"" || c1st === "'") { // "\"'".indexOf(c1st) !== -1
+			if (c1st === "\"" || c1st === "'") { 
 				// String literal
 				token = $tw.utils.parseStringLiteral(source,pos);
 				if(!token) {
@@ -519,8 +542,10 @@ pragmas:
 			} else if ("[]{}".indexOf(c1st) !== -1) {
 				// Single or double character
 				s = c2nd === c1st ? c1st + c1st : c1st;
+				if (s.length === 2)
+					token = this.readTwReference(source, pos, s);
 			} else if (c1st === "<" && (c2nd === '-' || c2nd === '^' || c2nd === '!' || c2nd === "?")) {
-				// < or <- or <^ or <! or <? or <script> 
+				// < or <- or <^ or <! or <? 
 				s = c1st + c2nd;
 			} else if ((c1st === '-' || c1st === '^' || c1st === '!' || c1st === "?") && c2nd === '>') {
 					s = c1st + c2nd;
@@ -535,6 +560,9 @@ pragmas:
 					s+= c3rd;
 			} else if (source.substr(pos, 8) === "<script>") {
 				token = this.readScript(source, pos);
+			} else if ((c1st === '!' && c2nd === '!') || (c1st === '#' && c2nd === '#')) {
+				// transclusion field & data support
+				s = c1st + c2nd;
 			} else if("()<>+/:|-".indexOf(c1st) !== -1) {
 			// Single character
 				s = c1st;
@@ -584,11 +612,20 @@ pragmas:
 	};
 
 	Parser.prototype.readScript = function(source,pos) {
-		var lpos = source.lastIndexOf("</script>");
+		var lpos = source.lastIndexOf("</script>", pos);
 		if (lpos === -1)
 			throw "Invalid Railroad script";
-		var script = source.substr(pos + 8, lpos - (pos+8+1));
-		return {type: "script", value: script, start: pos, end: lpos + 9};
+		var script = source.substr(pos + 8, lpos - (pos+8));
+		return {type: "script", value: script, start: pos, end: lpos+8+1};
+	}
+
+	Parser.prototype.readTwReference = function(source, pos, feature) {
+		var closeFeature = feature === "[[" ? "]]" : "}}";
+		var cpos = source.indexOf(closeFeature, pos);
+		if (cpos === -1)
+			throw "Invalid TiddlyWiki Reference";
+		var content = source.substr(pos + 2, cpos - (pos+2));
+		return {type: "tw-ref", kind: feature, value: content, start: pos, end: cpos+2};
 	}
 
 	/////////////////////////// Exports

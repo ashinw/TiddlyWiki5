@@ -123,14 +123,15 @@ Components of a railroad diagram.
 	
 	/////////////////////////// Leaf components
 	
-	var Comment = function(text) {
+	var Comment = function(text, {href, title}={}) {
 		this.initialiseLeaf("Comment",text);
+		this.config = {href: href, title: title};
 	};
 	
 	Comment.prototype = new Component();
 	
 	Comment.prototype.toSvg = function() {
-		return railroad.Comment(this.text);
+		return railroad.Comment(this.text, this.config);
 	}
 	
 	var Dummy = function() {
@@ -143,35 +144,38 @@ Components of a railroad diagram.
 		return railroad.Skip();
 	}
 
-	var End = function(endType) {
+	var End = function(endType, eol) {
 		this.initialiseLeaf("End");
 		this.endType = endType;
+		this.makeEol = eol;
 	};
 	
 	End.prototype = new Component();
 	
 	End.prototype.toSvg = function() {
-		return railroad.End(this.endType);
+		return railroad.End({type: this.endType, eol: this.makeEol} );
 	}
 	
-	var Nonterminal = function(text) {
+	var Nonterminal = function(text, {href, title}={}) {
 		this.initialiseLeaf("Nonterminal",text);
+		this.config = {href: href, title: title};
 	};
 	
 	Nonterminal.prototype = new Component();
 	
 	Nonterminal.prototype.toSvg = function() {
-		return railroad.NonTerminal(this.text);
+		return railroad.NonTerminal(this.text, this.config);
 	}
 	
-	var Terminal = function(text) {
+	var Terminal = function(text, {href, title}={}) {
 		this.initialiseLeaf("Terminal",text);
+		this.config = {href: href, title: title};
 	};
 	
 	Terminal.prototype = new Component();
 	
 	Terminal.prototype.toSvg = function() {
-		return railroad.Terminal(this.text);
+		return railroad.Terminal(this.text, this.config);
 	}
 	
 	/////////////////////////// Components with one child
@@ -203,9 +207,10 @@ Components of a railroad diagram.
 		return railroad.ZeroOrMore(this.child.toSvg(),separatorSvg,skip);
 	}
 	
-	var Repeated = function(content,separator) {
+	var Repeated = function(content,separator,showArrows) {
 		this.initialiseWithChild("Repeated",content);
 		this.separator = toSingleChild(separator);
+		this.showArrows = showArrows;
 	};
 	
 	Repeated.prototype = new Component();
@@ -213,7 +218,7 @@ Components of a railroad diagram.
 	Repeated.prototype.toSvg = function() {
 		// Call OneOrMore(component,separator)
 		var separatorSvg = this.separator ? this.separator.toSvg() : null;
-		return railroad.OneOrMore(this.child.toSvg(),separatorSvg);
+		return railroad.OneOrMore(this.child.toSvg(),separatorSvg,this.showArrows);
 	}
 	
 	var Link = function(content,twOptions) {

@@ -47,7 +47,8 @@ RailroadWidget.prototype.render = function(parent,nextSibling) {
 			debug: this.getAttribute("debug", config.debug || "no") === "yes",
 			start: this.getAttribute("start", config.start || "simple"),
 			startLabel: this.getAttribute("startLabel", config.startLabel),
-			end: this.getAttribute("end", config.end || "simple")
+			end: this.getAttribute("end", config.end || "simple"),
+			titleLinkDelim: this.getAttribute("titleLinkDelim", config.titleLinkDelim || "|")
 		};
 		// Parse the source
 		var parser = new Parser(this,source,options);

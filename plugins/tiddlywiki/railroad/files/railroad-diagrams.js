@@ -342,7 +342,8 @@ var temp = (function(options) {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		Path(x,y).h(gaps[0]).addTo(this);
-		Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		if (!(this.items[this.items.length-1] instanceof End))
+			Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
 		x += gaps[0];
 
 		for(var i = 0; i < this.items.length; i++) {
@@ -730,8 +731,8 @@ var temp = (function(options) {
 				if (item instanceof Stack)
 					this.extraHeight = 40 * item.items.length; // there is a defect with diagram viewbox height for Choice/Stack combo
 			}
-			if (lastNode instanceof End && Diagram.config.closeEol) {
-				// deferedAddto = undefined;
+			if (lastNode instanceof End && lastNode.makeEol) {
+				// skip join with main line
 			} else {
 				Path(x+Diagram.ARC_RADIUS*2+innerWidth, y+distanceFromY+item.height)
 					.arc('se')
@@ -1015,8 +1016,8 @@ var temp = (function(options) {
 			throw "Unknown value for Optional()'s 'skip' argument.";
 	}
 
-	var OneOrMore = funcs.OneOrMore = function OneOrMore(item, rep) {
-		if(!(this instanceof OneOrMore)) return new OneOrMore(item, rep);
+	var OneOrMore = funcs.OneOrMore = function OneOrMore(item, rep, showArrows) {
+		if(!(this instanceof OneOrMore)) return new OneOrMore(item, rep, showArrows);
 		FakeSVG.call(this, 'g');
 		rep = rep || (new Skip);
 		this.item = wrapString(item);
@@ -1029,8 +1030,7 @@ var temp = (function(options) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down
 			this.attrs['data-type'] = "oneormore"
 		}
-	/* TiddlyWiki: moved calculation of distanceFromY (of the repeat arc) to here */
-	// this.distanceFromY = Math.max(Diagram.ARC_RADIUS*2, this.item.down+Diagram.VERTICAL_SEPARATION+this.rep.up);
+		this.showArrows = showArrows;
 	}
 	subclassOf(OneOrMore, FakeSVG);
 	OneOrMore.prototype.needsSpace = true;
@@ -1053,7 +1053,7 @@ var temp = (function(options) {
 		Path(x+this.width-Diagram.ARC_RADIUS, y+distanceFromY+this.rep.height).arc('se').up(distanceFromY-Diagram.ARC_RADIUS*2+this.rep.height-this.item.height).arc('en').addTo(this);
 
 		/* TiddlyWiki: code added */
-		if (Diagram.config.showArrows) {
+		if (this.showArrows) {
 			var arrowSize = Diagram.ARC_RADIUS/2;
 			// Compensate for the illusion that makes the arrow look unbalanced if it's too close to the curve below it
 			var multiplier = (distanceFromY < arrowSize*5) ? 1.2 : 1;
@@ -1070,21 +1070,25 @@ var temp = (function(options) {
 	var Start = funcs.Start = function Start({type="simple", label}={}) {
 		if(!(this instanceof Start)) return new Start({type, label});
 		FakeSVG.call(this, 'g');
-		this.width = 20;
+		this.config({type: type, label: label});
 		this.height = 0;
 		this.up = 10;
 		this.down = 10;
-		this.type = type;
-		if(label != undefined) {
-			this.label = ""+label;
-			this.width = Math.max(20, this.label.length * Diagram.CHAR_WIDTH + 10);
-		}
 		if(Diagram.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down
 			this.attrs['data-type'] = "start"
 		}
 	}
 	subclassOf(Start, FakeSVG);
+	Start.prototype.config = function({type="simple", label}={}) {
+		this.type = type;
+		this.label = undefined;
+		this.width = 20;
+		if(label != undefined) {
+			this.label = ""+label;
+			this.width = Math.max(20, this.label.length * Diagram.CHAR_WIDTH + 10);
+		}
+	}
 	Start.prototype.format = function(x,y) {
 		let path = new Path(x, y-10);
 		if (this.type === "complex") {
@@ -1106,25 +1110,37 @@ var temp = (function(options) {
 		return this;
 	}
 
-	var End = funcs.End = function End({type="simple"}={}) {
-		if(!(this instanceof End)) return new End({type});
+	var End = funcs.End = function End({type="simple", label, eol=false}={}) {
+		if(!(this instanceof End)) return new End({type, undefined, eol});
 		FakeSVG.call(this, 'path');
-		this.width = 20;
+		this.config({type: type, label: label});
 		this.height = 0;
 		this.up = 10;
 		this.down = 10;
-		this.type = type;
+		this.makeEol = eol;
 		if(Diagram.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down
 			this.attrs['data-type'] = "end"
 		}
 	}
 	subclassOf(End, FakeSVG);
+	End.prototype.config = function({type="simple", label}={}) {
+		this.type = type;
+		this.label = undefined;
+		this.width = 20;
+		if(label != undefined) {
+			this.label = ""+label;
+			this.width = Math.max(20, this.label.length * Diagram.CHAR_WIDTH + 10);
+		}
+	}
 	End.prototype.format = function(x,y) {
 		if (this.type === "complex") {
 			this.attrs.d = 'M '+x+' '+y+' h 20 m 0 -10 v 20';
 		} else {
 			this.attrs.d = 'M '+x+' '+y+' h 20 m -10 -10 v 20 m 10 -20 v 20';
+		}
+		if(this.label) {
+			new FakeSVG('text', {x:x, y:y-15, style:"text-anchor:end"}, this.label).addTo(this);
 		}
 		return this;
 	}
@@ -1155,9 +1171,11 @@ var temp = (function(options) {
 
 		FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down, rx:10, ry:10}).addTo(this);
 		var text = FakeSVG('text', {x:x+this.width/2, y:y+4}, this.text);
-		if(this.href)
-			FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
+		if(this.href) {
+			// modified to support TW manipulation (refer patchLinks)
+			var attr = (typeof this.href === "string") ? {'xlink:href': this.href}: this.href;
+			FakeSVG('a', attr, [text]).addTo(this);
+		} else
 			text.addTo(this);
 		if(this.title)
 			new FakeSVG('title', {}, this.title).addTo(this);
@@ -1190,18 +1208,20 @@ var temp = (function(options) {
 
 		FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down}).addTo(this);
 		var text = FakeSVG('text', {x:x+this.width/2, y:y+4}, this.text);
-		if(this.href)
-			FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
+		if(this.href) {
+			// modified to support TW manipulation (refer patchLinks)
+			var attr = (typeof this.href === "string") ? {'xlink:href': this.href}: this.href;
+			FakeSVG('a', attr, [text]).addTo(this);
+		} else
 			text.addTo(this);
 		if(this.title)
 			new FakeSVG('title', {}, this.title).addTo(this);
 		return this;
 	}
 
-	var Comment = funcs.Comment = function Comment(text, {href, title}={}) {
+	var Comment = funcs.Comment = function Comment(text, {href, title, attr}={}) {
 		if(!(this instanceof Comment)) return new Comment(text, {href, title});
-		FakeSVG.call(this, 'g');
+		FakeSVG.call(this, 'g', attr);
 		this.text = ""+text;
 		this.href = href;
 		this.title = title;
@@ -1224,9 +1244,11 @@ var temp = (function(options) {
 		x += gaps[0];
 
 		var text = FakeSVG('text', {x:x+this.width/2, y:y+5, class:'comment'}, this.text);
-		if(this.href)
-			FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
+		if(this.href) {
+			// modified to support TW manipulation (refer patchLinks)
+			var attr = (typeof this.href === "string") ? {'xlink:href': this.href}: this.href;
+			FakeSVG('a', attr, [text]).addTo(this);
+		} else
 			text.addTo(this);
 		if(this.title)
 			new FakeSVG('title', {}, this.title).addTo(this);
